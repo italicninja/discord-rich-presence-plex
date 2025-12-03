@@ -1,0 +1,86 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on version tags like v2.12.0
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Generate version info
+      run: python generate_version_info.py
+
+    - name: Build with PyInstaller
+      run: python -m PyInstaller PlexDiscordRPC.spec --clean
+
+    - name: Get version from constants
+      id: get_version
+      run: |
+        python -c "import sys; sys.path.insert(0, '.'); from config.constants import version; print(f'version={version}')" >> $env:GITHUB_OUTPUT
+
+    - name: List dist directory
+      run: dir dist
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: PlexDiscordRPC-Windows
+        path: dist/PlexDiscordRPC-v*.exe
+        if-no-files-found: error
+
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/PlexDiscordRPC-v*.exe
+        body: |
+          ## Discord Rich Presence for Plex - Windows Release
+
+          ### Installation
+          1. Download `PlexDiscordRPC-v${{ steps.get_version.outputs.version }}.exe`
+          2. Run the executable (no installation required)
+          3. Look for the icon in your system tray
+          4. Right-click the icon for options
+
+          ### Features
+          - ✅ Standalone executable (no Python required)
+          - ✅ System tray application
+          - ✅ Pause/Resume monitoring
+          - ✅ Quick access to config and logs
+          - ✅ Automatic Plex authentication
+          - ✅ Discord Rich Presence integration
+
+          ### First Run
+          On first run:
+          1. The app will create a `data` folder
+          2. You'll be prompted to sign in to Plex (browser will open)
+          3. Configure your Plex server name in `data/config.yaml`
+
+          ### Requirements
+          - Windows 10/11
+          - Discord desktop client running
+          - Plex Media Server access
+
+          **Note:** The executable may take a few seconds to start on first launch.
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

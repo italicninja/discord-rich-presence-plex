@@ -4,6 +4,10 @@ PyInstaller spec file for Discord Rich Presence for Plex
 Windows System Tray Application
 """
 
+import sys
+sys.path.insert(0, '.')
+from config.constants import version
+
 block_cipher = None
 
 a = Analysis(
@@ -37,7 +41,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='PlexDiscordRPC',
+    name=f'PlexDiscordRPC-v{version}',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -51,4 +55,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon='icon.ico',
+    version='version_info.txt',  # Windows version info
 )

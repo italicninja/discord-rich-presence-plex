@@ -46,6 +46,10 @@ data/
 test_*.py
 create_icon.py
 
+# Build artifacts
+version_info.txt
+version_info.py
+
 # OS
 .DS_Store
 Thumbs.db
