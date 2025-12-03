@@ -30,9 +30,10 @@ if isInContainer:
 		logger.warning("Not running as the superuser. Manually ensure appropriate ownership of mounted contents")
 
 from config.constants import noPipInstall
+from utils.resources import is_frozen
 
-# Auto-install dependencies (same as main.py)
-if not noPipInstall:
+# Auto-install dependencies (skip if running as PyInstaller executable)
+if not noPipInstall and not is_frozen():
 	try:
 		import subprocess
 		def parsePipPackages(packagesStr: str) -> dict[str, str]:
@@ -56,6 +57,7 @@ from typing import Optional
 from utils.cache import loadCache
 from utils.logging import formatter
 from utils.text import formatSeconds
+from utils.resources import get_resource_path
 import logging
 import models.config
 import time
@@ -253,11 +255,19 @@ class PlexDiscordRPC:
 
 	def load_icon(self) -> Image.Image:
 		"""Load or create icon image"""
-		icon_path = "icon.png"
+		# Try to load icon from resource path (works with PyInstaller)
+		icon_path = get_resource_path("icon.png")
 
 		if os.path.isfile(icon_path):
 			try:
 				return Image.open(icon_path)
+			except Exception as e:
+				logger.warning(f"Failed to load icon from {icon_path}: {e}")
+
+		# Fallback: try current directory
+		if os.path.isfile("icon.png"):
+			try:
+				return Image.open("icon.png")
 			except:
 				pass
 
