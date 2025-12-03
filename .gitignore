@@ -42,6 +42,10 @@ env/
 data/
 *.log
 
+# Development/testing
+test_*.py
+create_icon.py
+
 # OS
 .DS_Store
 Thumbs.db
