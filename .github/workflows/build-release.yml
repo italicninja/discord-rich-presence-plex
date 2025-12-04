@@ -6,6 +6,9 @@ on:
       - 'v*.*.*'  # Triggers on version tags like v2.12.0
   workflow_dispatch:  # Allows manual triggering
 
+permissions:
+  contents: write  # Required for creating releases
+
 jobs:
   build-windows:
     runs-on: windows-latest
