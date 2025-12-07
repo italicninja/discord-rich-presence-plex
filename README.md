@@ -9,6 +9,26 @@ Discord Rich Presence for Plex is a Python script which displays your [Plex](htt
 
 ## Installation
 
+### Windows (Standalone Executable - Recommended)
+
+**No Python installation required!**
+
+1. Download `PlexDiscordRPC-v*.exe` from the [latest release](https://github.com/phin05/discord-rich-presence-plex/releases/latest)
+2. Double-click the executable to run
+3. The app will appear in your Windows system tray (bottom-right corner)
+4. Right-click the tray icon to access the menu
+5. On first run, your browser will open for Plex authentication
+
+**Data Storage**: Config, cache, and logs are stored in `%APPDATA%\PlexDiscordRPC` and persist across updates.
+
+**System Tray Features**:
+- **Settings window** - Graphical configuration editor (no manual YAML editing needed!)
+- Pause/Resume monitoring without restarting
+- Open data folder, config file, or log file from tray menu
+- Runs silently in the background (no console window)
+
+### Python Script (Cross-Platform)
+
 If you're using a Linux-based operating system, you can [run this script with Docker](#run-with-docker). Otherwise, follow these instructions:
 
 1. Install [Python](https://www.python.org/downloads/) (version 3.10 or newer) - Make sure to tick "Add Python to PATH" during the installation.
@@ -23,45 +43,58 @@ The script must be running on the same machine as your Discord client.
 
 ## Configuration
 
-The config file is stored in a directory named `data`.
+### Easy Configuration (Windows Executable)
+
+**The easiest way to configure the application is through the GUI settings window:**
+
+1. Right-click the system tray icon
+2. Click **"Settings..."**
+3. Adjust settings in the tabbed interface:
+   - **Display Settings**: What metadata to show (duration, year, genres, etc.)
+   - **Posters & Images**: Enable poster display and configure Imgur
+   - **Logging**: Debug logging and file output options
+4. Click **"Save & Restart Required"**
+5. Restart the application for changes to take effect
+
+### Configuration File Location
+
+For advanced users or when using the Python script:
+
+- **Windows Executable**: `%APPDATA%\PlexDiscordRPC\config.yaml`
+  - Quick access: Right-click tray icon → "Open Data Folder" or "Open Config File"
+- **Python Script / Docker**: `./data/config.yaml` (in the application directory)
 
 ### Supported Formats
 
 - YAML - `config.yaml` / `config.yml`
 - JSON - `config.json`
 
-### Reference
+### Common Configuration Options
 
-- `logging`
-  - `debug` (boolean, default: `true`) - Outputs additional debug-helpful information to the console.
-  - `writeToFile` (boolean, default: `false`) - Writes console output to a `console.log` file in the `data` directory.
-- `display` - Display settings for Rich Presence
-  - `duration` (boolean, default: `true`) - Displays the total duration. Applicable to movies and TV shows only.
-  - `genres` (boolean, default: `true`) - Displays the genre. Applicable to movies only.
-  - `album` (boolean, default: `true`) - Displays the album name. Applicable to music only.
-  - `albumImage` (boolean, default: `true`) - Displays the album image. Applicable to music only.
-  - `artist` (boolean, default: `true`) - Displays the artist name. Applicable to music only.
-  - `artistImage` (boolean, default: `true`) - Displays the artist image. Applicable to music only.
-  - `year` (boolean, default: `true`) - Displays the release year.
-  - `statusIcon` (boolean, default: `false`) - Displays a status icon (playing, paused, buffering) at the bottom-right corner of the poster. Applicable to movies and TV shows only. Posters get cropped to a square if this is enabled (Discord bug/limitation).
-  - `progressMode` (string, default: `bar`) - Progress/timestamp display mode. Valid modes are `off`, `elapsed` (displays elapsed time), `remaining` (displays remaining time) and `bar` (displays a progress bar). The `off` and `remaining` modes are currently broken due to a Discord bug/limitation.
-  - `paused` (boolean, default: `false`) - Displays Rich Presence even while media is paused. Progress/timestamp display while paused is currently broken due to a Discord bug/limitation.
-  - `posters`
-    - `enabled` (boolean, default: `false`) - Displays media posters (including album art and artist images). Requires `imgurClientID`.
-    - `imgurClientID` (string, default: `""`) - [Obtention Instructions](#obtaining-an-imgur-client-id)
-    - `maxSize` (int, default: `256`) - Maximum width and maximum height to use while downscaling posters before uploading them.
-  - `buttons` (list) - [Information](#buttons)
-    - `label` (string) - The label to be displayed on the button.
-    - `url` (string) - A web address or a [dynamic URL placeholder](#dynamic-button-urls).
-    - `mediaTypes` (list, optional) - If set, the button is displayed only for the specified media types. Valid media types are `movie`, `episode`, `live_episode`, `track` and `clip`.
-- `users` (list)
-  - `token` (string) - An access token associated with your Plex account. ([X-Plex-Token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/), [Authenticating with Plex](https://forums.plex.tv/t/authenticating-with-plex/609370))
-  - `servers` (list)
-    - `name` (string) - Name of the Plex Media Server to connect to.
-    - `listenForUser` (string, optional) - The script reacts to alerts originating only from this username. Defaults to the parent user's username if not set.
-    - `blacklistedLibraries` (list, optional) - Alerts originating from libraries in this list are ignored.
-    - `whitelistedLibraries` (list, optional) - If set, alerts originating from libraries that are not in this list are ignored.
-    - `ipcPipeNumber` (int, optional) - A number in the range of `0-9` to specify the Discord IPC pipe to connect to. Defaults to `-1`, which specifies that the first existing pipe in the range should be used. When a Discord client is launched, it binds to the first unbound pipe number, which is typically `0`.
+**Most settings are available in the GUI (Windows executable).** For manual editing or Python/Docker users:
+
+**Display Settings:**
+- `display.duration` - Show total duration (movies/TV)
+- `display.year` - Show release year
+- `display.genres` - Show genres (movies only)
+- `display.progressMode` - Progress display: `bar`, `elapsed`, `remaining`, or `off`
+- `display.paused` - Show Rich Presence while paused
+
+**Poster Settings:**
+- `display.posters.enabled` - Enable poster display (requires Imgur)
+- `display.posters.imgurClientID` - [Get Imgur Client ID](#obtaining-an-imgur-client-id)
+- `display.posters.maxSize` - Max poster size (default: 256px)
+
+**Music Settings:**
+- `display.album` / `display.artist` - Show album/artist name
+- `display.albumImage` / `display.artistImage` - Show images
+
+**Advanced Settings:**
+- `users[].servers[].blacklistedLibraries` - Libraries to ignore
+- `users[].servers[].whitelistedLibraries` - Only monitor these libraries
+- `users[].servers[].ipcPipeNumber` - Discord IPC pipe (0-9, default: -1 for auto)
+
+**💡 Tip:** Use the Settings window (Windows exe) to configure these visually. See full configuration reference in [DOCS.md](DOCS.md).
 
 ### Obtaining an Imgur client ID
 
@@ -122,16 +155,48 @@ users:
           - Movies
 ```
 
-## Configuration - Discord
+## Troubleshooting
 
-The "Share your detected activities with others" setting must be enabled under Discord Settings → Activity Settings → Activity Privacy.
+### Rich Presence Not Showing
+
+**Discord Settings:**
+- Ensure you're not set to invisible
+- Enable "Share your detected activities with others" under: Discord Settings → Activity Settings → Activity Privacy
 
 ![Discord Activity Privacy](assets/discord-activity-privacy.png)
 
-## Configuration - Environment Variables
+**Application Issues:**
+- Windows exe: Check logs via tray menu → "Open Log File"
+- Verify Discord is running on the **same machine** (IPC is local-only)
+- Restart both Discord and the application
 
-- `DRPP_PLEX_SERVER_NAME_INPUT` - This is used only during the initial setup (when there are no users in the config) as the name of the Plex server to be added to the config file after user authentication. If this isn't set, in interactive environments, the user is prompted for an input, and in non-interactive environments, "ServerName" is used as a placeholder, which can later be changed by editing the config file and restarting the script.
-- `DRPP_NO_PIP_INSTALL` - Set this to `true` to skip automatic invocation of pip on script startup to install missing dependencies.
+### Configuration Not Saving
+
+- Windows exe: Changes require **application restart** to take effect
+- Manual edits: Check YAML syntax (use Settings window to avoid errors)
+- Check file permissions in `%APPDATA%\PlexDiscordRPC`
+
+### Can't Find Config File
+
+- Windows exe: Right-click tray icon → "Open Data Folder"
+- Location: `%APPDATA%\PlexDiscordRPC\config.yaml`
+- Or use the GUI: Right-click tray icon → "Settings..."
+
+### Need More Help?
+
+- 📖 Documentation: [DOCS.md](DOCS.md)
+- 🔧 Developer Guide: [CLAUDE.md](CLAUDE.md)
+- 🐛 Report Issues: [GitHub Issues](https://github.com/italicninja/discord-rich-presence-plex/issues)
+- 📋 Changelog: [CHANGELOG.md](CHANGELOG.md)
+
+---
+
+## Advanced Configuration
+
+### Environment Variables
+
+- `DRPP_PLEX_SERVER_NAME_INPUT` - Plex server name during initial setup (for non-interactive environments)
+- `DRPP_NO_PIP_INSTALL` - Set to `true` to skip automatic dependency installation
 
 ## Run with Docker
 

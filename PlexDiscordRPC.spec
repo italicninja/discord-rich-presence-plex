@@ -21,6 +21,9 @@ a = Analysis(
     hiddenimports=[
         'pystray._win32',
         'PIL._tkinter_finder',
+        'tkinter',
+        'tkinter.ttk',
+        'tkinter.scrolledtext',
     ],
     hookspath=[],
     hooksconfig={},

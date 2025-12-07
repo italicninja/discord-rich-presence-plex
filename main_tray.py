@@ -65,6 +65,15 @@ import threading
 import pystray
 from PIL import Image
 
+# Import GUI configuration window
+try:
+	from ui.config_window import ConfigWindow
+	HAS_GUI = True
+except ImportError:
+	HAS_GUI = False
+	import warnings
+	warnings.warn("tkinter not available - GUI settings will be disabled")
+
 class PlexDiscordRPC:
 	"""Main application class for Windows system tray"""
 
@@ -79,9 +88,29 @@ class PlexDiscordRPC:
 		"""Initialize application (same as main.py init)"""
 		if not os.path.isdir(dataDirectoryPath):
 			os.makedirs(dataDirectoryPath)
+
+		# Migrate old files from current directory to data directory
 		for oldFilePath in ["config.json", "cache.json", "console.log"]:
 			if os.path.isfile(oldFilePath):
 				os.rename(oldFilePath, os.path.join(dataDirectoryPath, oldFilePath))
+
+		# Migrate old data from ./data to AppData (when running as executable on Windows)
+		from utils.resources import is_frozen
+		if sys.platform == "win32" and is_frozen() and dataDirectoryPath != "data":
+			old_data_dir = "data"
+			if os.path.isdir(old_data_dir):
+				# Migrate config, cache, and logs from old location
+				for filename in ["config.yaml", "config.yml", "config.json", "cache.json", "console.log"]:
+					old_file = os.path.join(old_data_dir, filename)
+					new_file = os.path.join(dataDirectoryPath, filename)
+					if os.path.isfile(old_file) and not os.path.isfile(new_file):
+						try:
+							import shutil
+							shutil.copy2(old_file, new_file)
+							logger.info(f"Migrated {filename} from {old_data_dir} to {dataDirectoryPath}")
+						except Exception as e:
+							logger.warning(f"Failed to migrate {filename}: {e}")
+
 		loadConfig()
 		if config["logging"]["debug"]:
 			logger.setLevel(logging.DEBUG)
@@ -91,6 +120,7 @@ class PlexDiscordRPC:
 			fileHandler.setFormatter(formatter)
 			logger.addHandler(fileHandler)
 		logger.info("%s - v%s (System Tray Mode)", name, version)
+		logger.info(f"Data directory: {os.path.abspath(dataDirectoryPath)}")
 		loadCache()
 
 	def auth_new_user(self) -> Optional[models.config.User]:
@@ -223,6 +253,63 @@ class PlexDiscordRPC:
 		else:
 			logger.error("Log file not found")
 
+	def open_data_folder(self, icon, item) -> None:
+		"""Open data folder in Windows Explorer"""
+		try:
+			if sys.platform == "win32":
+				os.startfile(dataDirectoryPath)
+			else:
+				# For other platforms, try xdg-open or open
+				import subprocess
+				opener = "xdg-open" if sys.platform == "linux" else "open"
+				subprocess.run([opener, dataDirectoryPath])
+			logger.info(f"Opened data folder: {dataDirectoryPath}")
+		except Exception as e:
+			logger.error(f"Failed to open data folder: {e}")
+
+	def open_settings(self, icon, item) -> None:
+		"""Open GUI settings window"""
+		if not HAS_GUI:
+			logger.error("GUI settings not available - tkinter not installed")
+			if self.icon:
+				self.icon.notify("GUI not available. Please edit config file manually.", name)
+			return
+
+		try:
+			logger.info("Opening settings window")
+
+			# Create and show the config window
+			config_window = ConfigWindow(config, self._on_config_saved)
+			config_window.show()
+
+		except Exception as e:
+			logger.exception(f"Failed to open settings window: {e}")
+			if self.icon:
+				self.icon.notify("Failed to open settings. Check logs for details.", name)
+
+	def _on_config_saved(self, new_config: dict) -> None:
+		"""Callback when user saves configuration from GUI"""
+		try:
+			# Update the global config
+			config.clear()
+			config.update(new_config)
+
+			# Save to file
+			saveConfig()
+
+			logger.info("Configuration saved successfully")
+
+			if self.icon:
+				self.icon.notify(
+					"Settings saved! Please restart the application for changes to take effect.",
+					"Configuration Saved"
+				)
+
+		except Exception as e:
+			logger.exception(f"Failed to save configuration: {e}")
+			if self.icon:
+				self.icon.notify("Failed to save settings. Check logs for details.", name)
+
 	def quit_app(self, icon, item) -> None:
 		"""Quit the application"""
 		logger.info("Shutting down...")
@@ -238,7 +325,7 @@ class PlexDiscordRPC:
 
 	def create_menu(self) -> pystray.Menu:
 		"""Create system tray menu"""
-		return pystray.Menu(
+		menu_items = [
 			pystray.MenuItem(name, None, enabled=False),
 			pystray.Menu.SEPARATOR,
 			pystray.MenuItem(
@@ -247,11 +334,23 @@ class PlexDiscordRPC:
 				default=True
 			),
 			pystray.Menu.SEPARATOR,
+		]
+
+		# Add Settings option if GUI is available
+		if HAS_GUI:
+			menu_items.append(pystray.MenuItem("Settings...", self.open_settings))
+			menu_items.append(pystray.Menu.SEPARATOR)
+
+		# Add file/folder access options
+		menu_items.extend([
+			pystray.MenuItem("Open Data Folder", self.open_data_folder),
 			pystray.MenuItem("Open Config File", self.open_config),
 			pystray.MenuItem("Open Log File", self.open_logs),
 			pystray.Menu.SEPARATOR,
 			pystray.MenuItem("Quit", self.quit_app)
-		)
+		])
+
+		return pystray.Menu(*menu_items)
 
 	def load_icon(self) -> Image.Image:
 		"""Load or create icon image"""

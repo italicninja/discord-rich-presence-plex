@@ -45,6 +45,7 @@ data/
 # Development/testing
 test_*.py
 create_icon.py
+test_config_gui.py
 
 # Build artifacts
 version_info.txt

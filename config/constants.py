@@ -2,12 +2,33 @@ import os
 import sys
 
 name = "Discord Rich Presence for Plex"
-version = "2.12.0"  # Windows tray version with PyInstaller packaging
+version = "2.14.0"  # GUI settings window
 
 plexClientID = "discord-rich-presence-plex"
 discordClientID = "413407336082833418"
 
-dataDirectoryPath = "data"
+# Determine data directory based on platform and execution context
+def get_data_directory() -> str:
+	"""
+	Get the appropriate data directory for storing config, cache, and logs.
+
+	- Windows (frozen/exe): %APPDATA%/PlexDiscordRPC
+	- Windows (dev): ./data (for backwards compatibility)
+	- Linux/macOS: ./data (or container-specific path)
+	"""
+	# Check if running as PyInstaller executable
+	is_frozen = getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')
+
+	# For Windows executable, use AppData
+	if sys.platform == "win32" and is_frozen:
+		appdata = os.environ.get("APPDATA")
+		if appdata:
+			return os.path.join(appdata, "PlexDiscordRPC")
+
+	# Fallback to ./data for development, Docker, and other platforms
+	return "data"
+
+dataDirectoryPath = get_data_directory()
 configFilePathBase = os.path.join(dataDirectoryPath, "config")
 cacheFilePath = os.path.join(dataDirectoryPath, "cache.json")
 logFilePath = os.path.join(dataDirectoryPath, "console.log")
