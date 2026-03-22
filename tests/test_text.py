@@ -1,6 +1,5 @@
 """Tests for utils/text.py — pure string utilities with no external I/O."""
 
-import pytest
 from utils.text import formatSeconds, truncate, transliterate, stripNonAscii
 
 

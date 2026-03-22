@@ -7,7 +7,6 @@ Tests for pure helper logic in core/plex.py:
 
 import pytest
 from unittest.mock import patch, MagicMock
-from types import SimpleNamespace
 
 from core.plex import buttonTypeGuidTypeMap
 
