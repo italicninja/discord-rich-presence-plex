@@ -1,0 +1,38 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+# Applies to all source files in the project
+include = ["*.py"]
+
+[tool.ruff.lint]
+# Rules enforced in CI:
+#   E7xx  - statement errors (bare except, etc.)
+#   F4xx  - import errors (unused imports)
+#   F8xx  - name errors (unused variables)
+select = ["E7", "F4", "F8"]
+
+# Intentional patterns that are not errors in this project:
+ignore = [
+    # Both entrypoints must run container setup and pip-install before importing
+    # the application — conditional/deferred imports are structural here.
+    "E402",
+    # All bare `except:` clauses in this project call logger.exception(), which
+    # captures and re-logs the full traceback. Flagging them as E722 would
+    # require switching to `except Exception:` everywhere, which is a separate
+    # cleanup pass.
+    "E722",
+]
+
+# Exclude generated files, build artifacts, and test scripts excluded from git
+exclude = [
+    "version_info.py",
+    "generate_version_info.py",
+    "create_icon.py",
+    "test_tray.py",
+    "test_config_gui.py",
+    "build/",
+    "dist/",
+    ".archive/",
+]

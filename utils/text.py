@@ -1,5 +1,5 @@
 from typing import Optional
-import re
+from unidecode import unidecode
 
 def formatSeconds(seconds: int | float, joiner: Optional[str] = None) -> str:
 	seconds = round(seconds)
@@ -15,5 +15,13 @@ def truncate(text: str, maxLength: int) -> str:
 		text = text[:maxLength-3] + "..."
 	return text
 
-def stripNonAscii(text: str) -> str:
-	return re.sub(r"[^\x00-\x7f]", "", text)
+def transliterate(text: str) -> str:
+	"""
+	Convert non-ASCII characters to their closest ASCII equivalent using
+	Unicode transliteration. Preferable to stripping, which silently mangles
+	non-English titles (e.g. 'Ñoño' → 'Nono' instead of '').
+	"""
+	return unidecode(text)
+
+# Backward-compatible alias — prefer transliterate() for new code.
+stripNonAscii = transliterate

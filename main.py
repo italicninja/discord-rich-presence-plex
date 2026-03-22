@@ -1,27 +1,8 @@
-from config.constants import isInContainer, runtimeDirectory, uid, gid, containerCwd, noRuntimeDirChown
+from core.setup import configure_container_environment
 from utils.logging import logger
 import os
 
-if isInContainer:
-	if not os.path.isdir(runtimeDirectory):
-		logger.error(f"Runtime directory does not exist. Ensure that it is mounted into the container at {runtimeDirectory}")
-		exit(1)
-	if os.geteuid() == 0: # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
-		if uid == -1 or gid == -1:
-			logger.warning(f"Environment variable(s) DRPP_UID and/or DRPP_GID are/is not set. Manually ensure appropriate ownership of {runtimeDirectory}")
-			statResult = os.stat(runtimeDirectory)
-			uid, gid = statResult.st_uid, statResult.st_gid
-		else:
-			if noRuntimeDirChown:
-				logger.warning(f"Environment variable DRPP_NO_RUNTIME_DIR_CHOWN is set to true. Manually ensure appropriate ownership of {runtimeDirectory}")
-			else:
-				os.system(f"chmod 700 {runtimeDirectory}")
-				os.system(f"chown -R {uid}:{gid} {runtimeDirectory}")
-		os.system(f"chown -R {uid}:{gid} {containerCwd}")
-		os.setgid(gid) # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
-		os.setuid(uid) # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
-	else:
-		logger.warning("Not running as the superuser. Manually ensure appropriate ownership of mounted contents")
+configure_container_environment()
 
 from config.constants import noPipInstall
 import sys
@@ -40,8 +21,8 @@ if not noPipInstall:
 			if installedPackageVersion != requiredPackageVersion:
 				logger.info(f"Installing dependency: {packageName} (required: {requiredPackageVersion}, installed: {installedPackageVersion})")
 				subprocess.run([sys.executable, "-m", "pip", "install", "-U", f"{packageName}=={requiredPackageVersion}"], check = True)
-	except Exception as e:
-		logger.exception("An unexpected error occured during automatic installation of dependencies. Install them manually by running the following command: python -m pip install -U -r requirements.txt")
+	except Exception:
+		logger.exception("An unexpected error occurred during automatic installation of dependencies. Install them manually by running the following command: python -m pip install -U -r requirements.txt")
 
 from config.constants import dataDirectoryPath, logFilePath, name, version, isInteractive, plexServerNameInput
 from core.config import config, loadConfig, saveConfig

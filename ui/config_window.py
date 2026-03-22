@@ -4,9 +4,8 @@ Provides a user-friendly interface for editing common configuration options
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
+from tkinter import ttk, messagebox
 from typing import Callable, Optional
-import sys
 
 class ConfigWindow:
 	"""Tkinter-based configuration window"""
@@ -241,7 +240,7 @@ class ConfigWindow:
 		section = ttk.LabelFrame(scrollable_frame, text="Logging Settings", padding=10)
 		section.pack(fill='x', padx=10, pady=5)
 
-		self.debug_var = tk.BooleanVar(value=logging.get('debug', True))
+		self.debug_var = tk.BooleanVar(value=logging.get('debug', False))
 		ttk.Checkbutton(section, text="Enable debug logging", variable=self.debug_var).pack(anchor='w', pady=5)
 
 		ttk.Label(section, text="Debug mode provides detailed information for troubleshooting.", font=('TkDefaultFont', 9)).pack(anchor='w', padx=20, pady=2)
@@ -257,11 +256,34 @@ class ConfigWindow:
 		self.imgur_entry.config(state=state)
 		self.max_size_spinbox.config(state=state)
 
-	def _save_config(self):
-		"""Save configuration and call the callback"""
-		# Update config dictionary with form values
+	def _validate(self) -> Optional[str]:
+		"""
+		Validate all form fields before saving.
 
-		# Display settings
+		Returns an error message string if validation fails, or None if all fields are valid.
+		"""
+		if self.posters_enabled_var.get() and not self.imgur_client_id_var.get().strip():
+			return (
+				"Imgur Client ID is required when poster display is enabled.\n\n"
+				"Please provide a Client ID or disable poster display."
+			)
+		try:
+			max_size = self.max_size_var.get()
+			if not (64 <= max_size <= 1024):
+				return "Maximum poster size must be between 64 and 1024 pixels."
+		except Exception:
+			return "Maximum poster size must be a whole number between 64 and 1024."
+		return None
+
+	def _save_config(self):
+		"""Validate, then save configuration and call the callback."""
+		# Validate first — before mutating anything
+		error = self._validate()
+		if error:
+			messagebox.showwarning("Validation Error", error)
+			return
+
+		# Build updated config from form values
 		if 'display' not in self.config:
 			self.config['display'] = {}
 
@@ -276,38 +298,28 @@ class ConfigWindow:
 		self.config['display']['paused'] = self.paused_var.get()
 		self.config['display']['statusIcon'] = self.status_icon_var.get()
 
-		# Poster settings
 		if 'posters' not in self.config['display']:
 			self.config['display']['posters'] = {}
 
 		self.config['display']['posters']['enabled'] = self.posters_enabled_var.get()
-		self.config['display']['posters']['imgurClientID'] = self.imgur_client_id_var.get()
+		self.config['display']['posters']['imgurClientID'] = self.imgur_client_id_var.get().strip()
 		self.config['display']['posters']['maxSize'] = self.max_size_var.get()
 
-		# Logging settings
 		if 'logging' not in self.config:
 			self.config['logging'] = {}
 
 		self.config['logging']['debug'] = self.debug_var.get()
 		self.config['logging']['writeToFile'] = self.write_to_file_var.get()
 
-		# Validate
-		if self.posters_enabled_var.get() and not self.imgur_client_id_var.get().strip():
-			messagebox.showwarning(
-				"Validation Error",
-				"Imgur Client ID is required when poster display is enabled.\n\n"
-				"Please provide a Client ID or disable poster display."
-			)
-			return
-
-		# Close window
-		self.window.destroy()
-		self.window = None
-
-		# Call the save callback
+		self._close_window()
 		self.on_save(self.config)
 
+	def _close_window(self):
+		"""Destroy the window safely, guarding against double-close."""
+		if self.window is not None:
+			self.window.destroy()
+			self.window = None
+
 	def _cancel(self):
-		"""Cancel and close the window"""
-		self.window.destroy()
-		self.window = None
+		"""Cancel and close the window without saving."""
+		self._close_window()

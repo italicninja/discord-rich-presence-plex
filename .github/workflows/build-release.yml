@@ -60,26 +60,31 @@ jobs:
           ### Installation
           1. Download `PlexDiscordRPC-v${{ steps.get_version.outputs.version }}.exe`
           2. Run the executable (no installation required)
-          3. Look for the icon in your system tray
+          3. Look for the icon in your system tray (bottom-right corner)
           4. Right-click the icon for options
 
           ### Features
           - ✅ Standalone executable (no Python required)
-          - ✅ System tray application
-          - ✅ Pause/Resume monitoring
-          - ✅ Quick access to config and logs
-          - ✅ Automatic Plex authentication
+          - ✅ System tray application with GUI settings window
+          - ✅ Pause/Resume monitoring from tray menu
+          - ✅ Quick access to config file, log file, and data folder
+          - ✅ Automatic Plex authentication (browser opens on first run)
           - ✅ Discord Rich Presence integration
 
           ### First Run
           On first run:
-          1. The app will create a `data` folder
-          2. You'll be prompted to sign in to Plex (browser will open)
-          3. Configure your Plex server name in `data/config.yaml`
+          1. Your browser will open for Plex authentication
+          2. After signing in, edit `config.yaml` to set your Plex server name
+             - Right-click tray icon → **Open Data Folder** or **Settings...**
+          3. Restart the application
+
+          ### Data Storage
+          Config, cache, and logs are stored in `%APPDATA%\PlexDiscordRPC` and persist across updates.
+          - Quick access: right-click tray icon → **Open Data Folder**
 
           ### Requirements
           - Windows 10/11
-          - Discord desktop client running
+          - Discord desktop client running on the same machine
           - Plex Media Server access
 
           **Note:** The executable may take a few seconds to start on first launch.
