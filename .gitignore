@@ -42,10 +42,9 @@ env/
 data/
 *.log
 
-# Development/testing
-test_*.py
+# Development/testing (manual test scripts at repo root, not the tests/ suite)
+/test_*.py
 create_icon.py
-test_config_gui.py
 
 # Build artifacts
 version_info.txt
