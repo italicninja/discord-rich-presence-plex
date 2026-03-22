@@ -4,12 +4,17 @@ from utils.logging import logger
 import json
 import models.config
 import os
+import threading
 import time
 import yaml
 
+# Protects all reads and writes to the global `config` dict.
+# Use an RLock so that loadConfig() can safely call saveConfig() without deadlocking.
+config_lock = threading.RLock()
+
 config: models.config.Config = {
 	"logging": {
-		"debug": True,
+		"debug": False,
 		"writeToFile": False,
 	},
 	"display": {
@@ -53,40 +58,42 @@ def loadConfig() -> None:
 			configFilePath = f"{configFilePathBase}.{configFileExtension}"
 			if doesFileExist:
 				break
-	if doesFileExist:
-		try:
-			with open(configFilePath, "r", encoding = "UTF-8") as configFile:
-				if configFileType == "yaml":
-					loadedConfig = yaml.safe_load(configFile) or {} # pyright: ignore[reportUnknownVariableType]
-				else:
-					loadedConfig = json.load(configFile) or {} # pyright: ignore[reportUnknownVariableType]
-		except:
-			os.rename(configFilePath, f"{configFilePathBase}-{time.time():.0f}.{configFileExtension}")
-			logger.exception("Failed to parse the config file. A new one will be created.")
-		else:
-			copyDict(loadedConfig, config)
-		if "hideTotalTime" in config["display"]:
-			config["display"]["duration"] = not config["display"]["hideTotalTime"]
-			del config["display"]["hideTotalTime"]
-		if "useRemainingTime" in config["display"]:
-			del config["display"]["useRemainingTime"]
-		if "remainingTime" in config["display"]:
-			del config["display"]["remainingTime"]
-		if config["display"]["progressMode"] not in ["off", "elapsed", "remaining", "bar"]:
-			config["display"]["progressMode"] = "bar"
-	saveConfig()
+	with config_lock:
+		if doesFileExist:
+			try:
+				with open(configFilePath, "r", encoding = "UTF-8") as configFile:
+					if configFileType == "yaml":
+						loadedConfig = yaml.safe_load(configFile) or {} # pyright: ignore[reportUnknownVariableType]
+					else:
+						loadedConfig = json.load(configFile) or {} # pyright: ignore[reportUnknownVariableType]
+			except:
+				os.rename(configFilePath, f"{configFilePathBase}-{time.time():.0f}.{configFileExtension}")
+				logger.exception("Failed to parse the config file. A new one will be created.")
+			else:
+				copyDict(loadedConfig, config)
+			if "hideTotalTime" in config["display"]:
+				config["display"]["duration"] = not config["display"]["hideTotalTime"]
+				del config["display"]["hideTotalTime"]
+			if "useRemainingTime" in config["display"]:
+				del config["display"]["useRemainingTime"]
+			if "remainingTime" in config["display"]:
+				del config["display"]["remainingTime"]
+			if config["display"]["progressMode"] not in ["off", "elapsed", "remaining", "bar"]:
+				config["display"]["progressMode"] = "bar"
+		saveConfig()
 
 class YamlSafeDumper(yaml.SafeDumper):
-    def increase_indent(self, flow: bool = False, indentless: bool = False) -> None:
-        return super().increase_indent(flow, False)
+	def increase_indent(self, flow: bool = False, indentless: bool = False) -> None:
+		return super().increase_indent(flow, False)
 
 def saveConfig() -> None:
-	try:
-		with open(configFilePath, "w", encoding = "UTF-8") as configFile:
-			if configFileType == "yaml":
-				yaml.dump(config, configFile, sort_keys = False, Dumper = YamlSafeDumper, allow_unicode = True)
-			else:
-				json.dump(config, configFile, indent = "\t")
-				configFile.write("\n")
-	except:
-		logger.exception("Failed to write to the config file")
+	with config_lock:
+		try:
+			with open(configFilePath, "w", encoding = "UTF-8") as configFile:
+				if configFileType == "yaml":
+					yaml.dump(config, configFile, sort_keys = False, Dumper = YamlSafeDumper, allow_unicode = True)
+				else:
+					json.dump(config, configFile, indent = "\t")
+					configFile.write("\n")
+		except:
+			logger.exception("Failed to write to the config file")

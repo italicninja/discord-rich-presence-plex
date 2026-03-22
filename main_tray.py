@@ -2,32 +2,12 @@
 Windows System Tray Application for Discord Rich Presence for Plex
 """
 
-from config.constants import isInContainer, runtimeDirectory, uid, gid, containerCwd, noRuntimeDirChown
+from core.setup import configure_container_environment
 from utils.logging import logger
 import os
 import sys
 
-# Container-specific setup (same as main.py)
-if isInContainer:
-	if not os.path.isdir(runtimeDirectory):
-		logger.error(f"Runtime directory does not exist. Ensure that it is mounted into the container at {runtimeDirectory}")
-		exit(1)
-	if os.geteuid() == 0: # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
-		if uid == -1 or gid == -1:
-			logger.warning(f"Environment variable(s) DRPP_UID and/or DRPP_GID are/is not set. Manually ensure appropriate ownership of {runtimeDirectory}")
-			statResult = os.stat(runtimeDirectory)
-			uid, gid = statResult.st_uid, statResult.st_gid
-		else:
-			if noRuntimeDirChown:
-				logger.warning(f"Environment variable DRPP_NO_RUNTIME_DIR_CHOWN is set to true. Manually ensure appropriate ownership of {runtimeDirectory}")
-			else:
-				os.system(f"chmod 700 {runtimeDirectory}")
-				os.system(f"chown -R {uid}:{gid} {runtimeDirectory}")
-		os.system(f"chown -R {uid}:{gid} {containerCwd}")
-		os.setgid(gid) # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
-		os.setuid(uid) # pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
-	else:
-		logger.warning("Not running as the superuser. Manually ensure appropriate ownership of mounted contents")
+configure_container_environment()
 
 from config.constants import noPipInstall
 from utils.resources import is_frozen
@@ -47,11 +27,11 @@ if not noPipInstall and not is_frozen():
 			if installedPackageVersion != requiredPackageVersion:
 				logger.info(f"Installing dependency: {packageName} (required: {requiredPackageVersion}, installed: {installedPackageVersion})")
 				subprocess.run([sys.executable, "-m", "pip", "install", "-U", f"{packageName}=={requiredPackageVersion}"], check = True)
-	except Exception as e:
-		logger.exception("An unexpected error occured during automatic installation of dependencies. Install them manually by running the following command: python -m pip install -U -r requirements.txt")
+	except Exception:
+		logger.exception("An unexpected error occurred during automatic installation of dependencies. Install them manually by running the following command: python -m pip install -U -r requirements.txt")
 
 from config.constants import dataDirectoryPath, logFilePath, name, version, plexServerNameInput
-from core.config import config, loadConfig, saveConfig
+from core.config import config, config_lock, loadConfig, saveConfig
 from core.plex import PlexAlertListener, initiateAuth, getAuthToken
 from typing import Optional
 from utils.cache import loadCache
@@ -160,7 +140,11 @@ class PlexDiscordRPC:
 			return None
 
 	def start_monitoring(self) -> None:
-		"""Start Plex monitoring in background thread"""
+		"""Start Plex monitoring (creates PlexAlertListener threads for each server)."""
+		if self.plexAlertListeners:
+			logger.debug("start_monitoring() called but listeners are already running — ignoring")
+			return
+
 		if not config["users"]:
 			logger.info("No users found in config file")
 			user = self.auth_new_user()
@@ -170,7 +154,6 @@ class PlexDiscordRPC:
 			config["users"].append(user)
 			saveConfig()
 
-		# Create PlexAlertListener instances for each server
 		self.plexAlertListeners = [
 			PlexAlertListener(user["token"], server)
 			for user in config["users"]
@@ -179,43 +162,38 @@ class PlexDiscordRPC:
 		logger.info(f"Started monitoring {len(self.plexAlertListeners)} Plex server(s)")
 
 	def stop_monitoring(self) -> None:
-		"""Stop all Plex monitoring"""
+		"""Stop all Plex monitoring and disconnect Discord Rich Presence."""
 		for listener in self.plexAlertListeners:
 			try:
 				listener.disconnect()
-			except:
+			except Exception:
 				pass
 		self.plexAlertListeners = []
 		logger.info("Stopped monitoring")
 
 	def monitoring_loop(self) -> None:
-		"""Background monitoring loop"""
+		"""Entry point for the background monitoring thread — starts listeners and keeps the thread alive."""
 		self.start_monitoring()
-
 		while self.running:
-			if not self.monitoring:
-				# Paused - just sleep
-				time.sleep(1)
-			else:
-				# Active - listeners are running in their own threads
-				time.sleep(1)
+			time.sleep(1)
 
 	def toggle_monitoring(self, icon, item) -> None:
-		"""Toggle monitoring on/off"""
+		"""Pause or resume Plex monitoring from the system tray menu."""
 		self.monitoring = not self.monitoring
 
 		if self.monitoring:
 			logger.info("Monitoring resumed")
+			self.start_monitoring()
 			if self.icon:
 				self.icon.title = f"{name} - Monitoring"
 				self.icon.notify("Monitoring resumed", name)
 		else:
 			logger.info("Monitoring paused")
+			self.stop_monitoring()
 			if self.icon:
 				self.icon.title = f"{name} - Paused"
 				self.icon.notify("Monitoring paused", name)
 
-		# Update the menu
 		if self.icon:
 			self.icon.update_menu()
 
@@ -290,12 +268,12 @@ class PlexDiscordRPC:
 	def _on_config_saved(self, new_config: dict) -> None:
 		"""Callback when user saves configuration from GUI"""
 		try:
-			# Update the global config
-			config.clear()
-			config.update(new_config)
-
-			# Save to file
-			saveConfig()
+			with config_lock:
+				# Atomically replace the global config so listener threads never
+				# see a partially-cleared dict between clear() and update().
+				config.clear() # pyright: ignore[reportAttributeAccessIssue]
+				config.update(new_config) # pyright: ignore[reportAttributeAccessIssue]
+				saveConfig()
 
 			logger.info("Configuration saved successfully")
 
@@ -413,7 +391,7 @@ class PlexDiscordRPC:
 		except KeyboardInterrupt:
 			logger.info("Interrupted by user")
 			self.quit_app(None, None)
-		except Exception as e:
+		except Exception:
 			logger.exception("Fatal error in main application")
 			sys.exit(1)
 

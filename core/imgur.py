@@ -7,6 +7,10 @@ import models.imgur
 import requests
 
 def uploadToImgur(url: str) -> Optional[str]:
+	imgurClientID = config["display"]["posters"]["imgurClientID"]
+	if not imgurClientID or not imgurClientID.strip():
+		logger.error("Imgur Client ID is not configured. Poster display is enabled but no Client ID was provided. Set 'display.posters.imgurClientID' in your config.")
+		return None
 	try:
 		originalImageBytesIO = io.BytesIO(requests.get(url).content)
 		originalImage = Image.open(originalImageBytesIO).convert("RGB")
@@ -19,7 +23,7 @@ def uploadToImgur(url: str) -> Optional[str]:
 		newImage.save(newImageBytesIO, subsampling = 0, quality = 90, format = "JPEG")
 		response = requests.post(
 			"https://api.imgur.com/3/image",
-			headers = { "Authorization": f"Client-ID {config['display']['posters']['imgurClientID']}" },
+			headers = { "Authorization": f"Client-ID {imgurClientID.strip()}" },
 			files = { "image": newImageBytesIO.getvalue() }
 		)
 		logger.debug("HTTP %d, %s, %s", response.status_code, response.headers, response.text.strip())
@@ -28,4 +32,4 @@ def uploadToImgur(url: str) -> Optional[str]:
 			raise Exception(data["data"]["error"])
 		return data["data"]["link"]
 	except:
-		logger.exception("An unexpected error occured while uploading an image to Imgur")
+		logger.exception("An unexpected error occurred while uploading an image to Imgur")

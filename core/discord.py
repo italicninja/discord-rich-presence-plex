@@ -42,7 +42,7 @@ class DiscordIpcService:
 			except FileNotFoundError:
 				pass
 			except:
-				logger.exception(f"An unexpected error occured while connecting to Discord IPC pipe {pipe}")
+				logger.exception(f"An unexpected error occurred while connecting to Discord IPC pipe {pipe}")
 		if not self.connected:
 			logger.error(f"Discord IPC pipe not found (attempted pipes: {', '.join(self.pipes)})")
 
@@ -55,7 +55,7 @@ class DiscordIpcService:
 			logger.debug("[READ] %s", data)
 			return data
 		except:
-			logger.exception("An unexpected error occured during an IPC read operation")
+			logger.exception("An unexpected error occurred during an IPC read operation")
 			self.connected = False
 
 	def write(self, op: int, payload: Any) -> None:
@@ -66,7 +66,7 @@ class DiscordIpcService:
 			payload = json.dumps(payload)
 			self.pipeWriter.write(struct.pack("<ii", op, len(payload)) + payload.encode("utf-8"))
 		except:
-			logger.exception("An unexpected error occured during an IPC write operation")
+			logger.exception("An unexpected error occurred during an IPC write operation")
 			self.connected = False
 
 	def connect(self) -> None:
@@ -81,22 +81,27 @@ class DiscordIpcService:
 		if not self.connected:
 			logger.warning("Attempt to disconnect from Discord IPC pipe while not connected")
 			return
-		if not self.loop or not self.pipeWriter or not self.pipeReader:
-			return
 		logger.info("Disconnecting from Discord IPC pipe")
-		try:
-			self.pipeWriter.close()
-		except:
-			logger.exception("An unexpected error occured while closing the IPC pipe writer")
-		try:
-			self.loop.run_until_complete(self.pipeReader.read())
-		except:
-			logger.exception("An unexpected error occured while closing the IPC pipe reader")
-		try:
-			self.loop.close()
-		except:
-			logger.exception("An unexpected error occured while closing the asyncio event loop")
+		loop, writer = self.loop, self.pipeWriter
 		self.connected = False
+		self.pipeReader = None
+		self.pipeWriter = None
+		self.loop = None
+		if writer:
+			try:
+				writer.close()
+				if loop:
+					# wait_closed() flushes buffers and releases OS resources cleanly.
+					# Reading from the reader after closing the writer causes spurious
+					# errors on Windows named pipes, so we do not do that here.
+					loop.run_until_complete(writer.wait_closed())
+			except:
+				logger.exception("An unexpected error occurred while closing the IPC pipe writer")
+		if loop:
+			try:
+				loop.close()
+			except:
+				logger.exception("An unexpected error occurred while closing the asyncio event loop")
 
 	def setActivity(self, activity: models.discord.Activity) -> None:
 		if not self.connected:
