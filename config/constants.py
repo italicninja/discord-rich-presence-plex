@@ -2,7 +2,7 @@ import os
 import sys
 
 name = "Discord Rich Presence for Plex"
-version = "2.15.0"  # Reliability, security, and code quality improvements
+version = "2.15.1"  # Performance, resource management, and code quality improvements
 
 plexClientID = "discord-rich-presence-plex"
 discordClientID = "413407336082833418"
