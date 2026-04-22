@@ -41,7 +41,7 @@ class DiscordIpcService:
 					break
 			except FileNotFoundError:
 				pass
-			except:
+			except Exception:
 				logger.exception(f"An unexpected error occurred while connecting to Discord IPC pipe {pipe}")
 		if not self.connected:
 			logger.error(f"Discord IPC pipe not found (attempted pipes: {', '.join(self.pipes)})")
@@ -54,7 +54,7 @@ class DiscordIpcService:
 			data = json.loads(dataBytes[8:].decode("utf-8"))
 			logger.debug("[READ] %s", data)
 			return data
-		except:
+		except Exception:
 			logger.exception("An unexpected error occurred during an IPC read operation")
 			self.connected = False
 
@@ -65,7 +65,7 @@ class DiscordIpcService:
 			logger.debug("[WRITE] %s", payload)
 			payload = json.dumps(payload)
 			self.pipeWriter.write(struct.pack("<ii", op, len(payload)) + payload.encode("utf-8"))
-		except:
+		except Exception:
 			logger.exception("An unexpected error occurred during an IPC write operation")
 			self.connected = False
 
@@ -95,12 +95,12 @@ class DiscordIpcService:
 					# Reading from the reader after closing the writer causes spurious
 					# errors on Windows named pipes, so we do not do that here.
 					loop.run_until_complete(writer.wait_closed())
-			except:
+			except Exception:
 				logger.exception("An unexpected error occurred while closing the IPC pipe writer")
 		if loop:
 			try:
 				loop.close()
-			except:
+			except Exception:
 				logger.exception("An unexpected error occurred while closing the asyncio event loop")
 
 	def setActivity(self, activity: models.discord.Activity) -> None:

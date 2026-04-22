@@ -66,18 +66,16 @@ def loadConfig() -> None:
 						loadedConfig = yaml.safe_load(configFile) or {} # pyright: ignore[reportUnknownVariableType]
 					else:
 						loadedConfig = json.load(configFile) or {} # pyright: ignore[reportUnknownVariableType]
-			except:
+			except Exception:
 				os.rename(configFilePath, f"{configFilePathBase}-{time.time():.0f}.{configFileExtension}")
 				logger.exception("Failed to parse the config file. A new one will be created.")
 			else:
 				copyDict(loadedConfig, config)
+			# Migrate renamed/removed keys from older config versions
 			if "hideTotalTime" in config["display"]:
-				config["display"]["duration"] = not config["display"]["hideTotalTime"]
-				del config["display"]["hideTotalTime"]
-			if "useRemainingTime" in config["display"]:
-				del config["display"]["useRemainingTime"]
-			if "remainingTime" in config["display"]:
-				del config["display"]["remainingTime"]
+				config["display"]["duration"] = not config["display"].pop("hideTotalTime")
+			for deprecated_key in ("useRemainingTime", "remainingTime"):
+				config["display"].pop(deprecated_key, None)
 			if config["display"]["progressMode"] not in ["off", "elapsed", "remaining", "bar"]:
 				config["display"]["progressMode"] = "bar"
 		saveConfig()
@@ -95,5 +93,5 @@ def saveConfig() -> None:
 				else:
 					json.dump(config, configFile, indent = "\t")
 					configFile.write("\n")
-		except:
+		except Exception:
 			logger.exception("Failed to write to the config file")
