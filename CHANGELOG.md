@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.1] - 2026-04-22
+
+### Fixed
+- **Bare `except:` clauses** replaced with `except Exception:` throughout `core/`, `utils/cache.py` — previously `SystemExit` and `KeyboardInterrupt` could be swallowed, causing the app to hang on Ctrl+C
+- **`imgur.py` BytesIO resource leak** — `BytesIO` objects are now opened with `with` statements, ensuring cleanup on all code paths including exceptions
+
+### Changed
+- **Eliminated up to 2 redundant Plex HTTP calls per alert** — `_buildActivity` now fetches the grandparent (episode show) or parent (track album) item once and shares it with `_buildMediaMetadata` and `_buildButtons` instead of each making an independent blocking request
+- **O(1) session lookup** — `_isSessionForListenUser` now builds a dict keyed by `sessionKey` instead of scanning the session list linearly on every alert
+- **Removed per-write cache pruning** — `setCacheKey` no longer calls `_prune_expired()` on every write; expired entries are pruned only at startup in `loadCache()`, eliminating unnecessary O(n) work on each Imgur upload
+- **Extracted `_resetConnectionState()`** — duplicate teardown code in `disconnect()` and `reconnect()` replaced with a single shared private method
+- **`config["display"]` cached** in hot methods (`_buildMediaMetadata`, `_buildActivity`) to avoid repeated nested dict traversal on every alert
+- **Deprecated config key migration** consolidated from three separate `if/del` blocks into a `pop()` call and a `for` loop
+- **Pip dependency check** extracted from `main.py` and `main_tray.py` into `utils/dependencies.py` — eliminates 15-line code duplication across both entry points
+
 ## [2.15.0] - 2026-03-21
 
 ### Fixed
