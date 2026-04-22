@@ -127,19 +127,28 @@ class PlexAlertListener(threading.Thread):
 				self.logger.error("Reconnecting in 10 seconds")
 				time.sleep(10)
 
+	def _resetConnectionState(self) -> None:
+		"""Cancel the connection-check timer and clear all server/account state."""
+		if self.connectionCheckTimer:
+			self.connectionCheckTimer.cancel()
+			self.connectionCheckTimer = None
+		self.account = None
+		self.server = None
+		self.alertListener = None
+		self.listenForUser = ""
+		self.isServerOwner = False
+		self.ignoreCount = 0
+
 	def disconnect(self) -> None:
 		self._stopped = True
 		self._reconnectEvent.set()
 		if self.alertListener:
 			try:
 				self.alertListener.stop()
-			except:
+			except Exception:
 				pass
 		self.disconnectRpc()
-		if self.connectionCheckTimer:
-			self.connectionCheckTimer.cancel()
-			self.connectionCheckTimer = None
-		self.account, self.server, self.alertListener, self.listenForUser, self.isServerOwner, self.ignoreCount = None, None, None, "", False, 0
+		self._resetConnectionState()
 		self.logger.info("Stopped listening for alerts")
 
 	def reconnect(self, exception: Exception) -> None:
@@ -147,13 +156,10 @@ class PlexAlertListener(threading.Thread):
 		if self.alertListener:
 			try:
 				self.alertListener.stop()
-			except:
+			except Exception:
 				pass
 		self.disconnectRpc()
-		if self.connectionCheckTimer:
-			self.connectionCheckTimer.cancel()
-			self.connectionCheckTimer = None
-		self.account, self.server, self.alertListener, self.listenForUser, self.isServerOwner, self.ignoreCount = None, None, None, "", False, 0
+		self._resetConnectionState()
 		self.logger.error("Reconnecting")
 		# Signal run() to restart its loop — no recursive call needed
 		self._reconnectEvent.set()
@@ -183,7 +189,7 @@ class PlexAlertListener(threading.Thread):
 	def tryHandleAlert(self, alert: models.plex.Alert) -> None:
 		try:
 			self.handleAlert(alert)
-		except:
+		except Exception:
 			self.logger.exception("An unexpected error occurred in the Plex alert handler")
 			self.disconnectRpc()
 
@@ -247,7 +253,7 @@ class PlexAlertListener(threading.Thread):
 		"""Return False if the item's library is blacklisted or not whitelisted."""
 		try:
 			libraryName = item.section().title
-		except:
+		except Exception:
 			libraryName = "ERROR"
 		if "blacklistedLibraries" in self.serverConfig and libraryName in self.serverConfig["blacklistedLibraries"]:
 			self.logger.debug("Library '%s' is blacklisted, ignoring", libraryName)
@@ -298,15 +304,17 @@ class PlexAlertListener(threading.Thread):
 			return False
 		for session in sessions:
 			self.logger.debug("%s, Session Key: %s, Usernames: %s", session, session.sessionKey, session.usernames)
-			if session.sessionKey == sessionKey:
-				self.logger.debug("Session found")
-				sessionUsername = session.usernames[0]
-				if sessionUsername.lower() == self.listenForUser.lower():
-					self.logger.debug("Username '%s' matches '%s', continuing", sessionUsername, self.listenForUser)
-					return True
-				self.logger.debug("Username '%s' doesn't match '%s', ignoring", sessionUsername, self.listenForUser)
-				return False
-		self.logger.debug("No matching session found, ignoring")
+		session_map = {s.sessionKey: s for s in sessions}
+		session = session_map.get(sessionKey)
+		if not session:
+			self.logger.debug("No matching session found, ignoring")
+			return False
+		self.logger.debug("Session found")
+		sessionUsername = session.usernames[0]
+		if sessionUsername.lower() == self.listenForUser.lower():
+			self.logger.debug("Username '%s' matches '%s', continuing", sessionUsername, self.listenForUser)
+			return True
+		self.logger.debug("Username '%s' doesn't match '%s', ignoring", sessionUsername, self.listenForUser)
 		return False
 
 	def _resetUpdateTimer(self) -> None:
@@ -316,34 +324,36 @@ class PlexAlertListener(threading.Thread):
 		self.updateTimeoutTimer = threading.Timer(self.updateTimeoutTimerInterval, self.updateTimeout)
 		self.updateTimeoutTimer.start()
 
-	def _buildMediaMetadata(self, item, mediaType: str) -> tuple[str, str, str, str, str, str, list[str]]:
+	def _buildMediaMetadata(self, item, mediaType: str, grandparentItem=None) -> tuple[str, str, str, str, str, str, list[str]]:
 		"""
 		Extract display metadata for the given media type.
+
+		grandparentItem: pre-fetched show (episode) or album (track) PlexAPI object — avoids
+		                 redundant fetchItem() calls when the caller already holds the object.
 
 		Returns:
 			(title, shortTitle, thumb, smallThumb, largeText, smallText, stateStrings)
 		"""
 		stateStrings: list[str] = []
 		largeText = thumb = smallText = smallThumb = ""
+		display = config["display"]
 
-		if config["display"]["duration"] and item.duration and mediaType != "track":
+		if display["duration"] and item.duration and mediaType != "track":
 			stateStrings.append(formatSeconds(item.duration / 1000))
 
 		if mediaType == "movie":
 			title = shortTitle = item.title
-			if config["display"]["year"] and item.year:
+			if display["year"] and item.year:
 				title += f" ({item.year})"
-			if config["display"]["genres"] and item.genres:
+			if display["genres"] and item.genres:
 				genres: list[Genre] = item.genres[:3]
 				stateStrings.append(", ".join(genre.tag for genre in genres))
 			thumb = item.thumb
 
 		elif mediaType == "episode":
 			title = shortTitle = item.grandparentTitle
-			if config["display"]["year"]:
-				grandparent = self.server.fetchItem(item.grandparentRatingKey)
-				if grandparent.year:
-					title += f" ({grandparent.year})"
+			if display["year"] and grandparentItem and grandparentItem.year:
+				title += f" ({grandparentItem.year})"
 			stateStrings.append(f"S{item.parentIndex:02}E{item.index:02}")
 			stateStrings.append(item.title)
 			thumb = item.grandparentThumb
@@ -356,17 +366,15 @@ class PlexAlertListener(threading.Thread):
 
 		elif mediaType == "track":
 			title = shortTitle = item.title
-			if config["display"]["album"]:
+			if display["album"]:
 				largeText = item.parentTitle
-				if config["display"]["year"]:
-					parent = self.server.fetchItem(item.parentRatingKey)
-					if parent.year:
-						largeText = f"{truncate(largeText, 110)} ({parent.year})"
-			if config["display"]["albumImage"]:
+				if display["year"] and grandparentItem and grandparentItem.year:
+					largeText = f"{truncate(largeText, 110)} ({grandparentItem.year})"
+			if display["albumImage"]:
 				thumb = item.thumb
-			if config["display"]["artist"]:
+			if display["artist"]:
 				stateStrings.append(item.originalTitle or item.grandparentTitle)
-			if config["display"]["artistImage"]:
+			if display["artistImage"]:
 				smallText = item.grandparentTitle or item.originalTitle
 				smallThumb = item.grandparentThumb
 
@@ -376,13 +384,17 @@ class PlexAlertListener(threading.Thread):
 
 		return title, shortTitle, thumb, smallThumb, largeText, smallText, stateStrings
 
-	def _buildButtons(self, item, mediaType: str, shortTitle: str) -> list[models.discord.ActivityButton]:
-		"""Resolve configured buttons, substituting dynamic URL placeholders with real URLs."""
+	def _buildButtons(self, item, mediaType: str, shortTitle: str, grandparentItem=None) -> list[models.discord.ActivityButton]:
+		"""Resolve configured buttons, substituting dynamic URL placeholders with real URLs.
+
+		grandparentItem: pre-fetched show (episode) PlexAPI object — avoids a redundant
+		                 fetchItem() call when the caller already holds the object.
+		"""
 		guidsRaw: list[Guid] = []
 		if mediaType in ["movie", "track"]:
 			guidsRaw = item.guids
 		elif mediaType == "episode":
-			guidsRaw = self.server.fetchItem(item.grandparentRatingKey).guids
+			guidsRaw = grandparentItem.guids if grandparentItem else []
 		guids: dict[str, str] = {
 			parts[0]: parts[1]
 			for parts in (guid.id.split("://") for guid in guidsRaw)
@@ -446,21 +458,31 @@ class PlexAlertListener(threading.Thread):
 
 	def _buildActivity(self, item, mediaType: str, state: str, viewOffset: int) -> models.discord.Activity:
 		"""Assemble the full Discord activity payload from media metadata and config."""
-		title, shortTitle, thumb, smallThumb, largeText, smallText, stateStrings = self._buildMediaMetadata(item, mediaType)
+		display = config["display"]
+
+		# Fetch the parent/grandparent item once so both _buildMediaMetadata and
+		# _buildButtons can share it without triggering redundant HTTP calls.
+		grandparentItem = None
+		if mediaType == "episode":
+			grandparentItem = self.server.fetchItem(item.grandparentRatingKey)
+		elif mediaType == "track" and display["album"] and display["year"]:
+			grandparentItem = self.server.fetchItem(item.parentRatingKey)
+
+		title, shortTitle, thumb, smallThumb, largeText, smallText, stateStrings = self._buildMediaMetadata(item, mediaType, grandparentItem)
 
 		# Progress text for non-playing states (not applicable to tracks)
 		if state != "playing" and mediaType != "track":
-			progressMode = config["display"]["progressMode"]
+			progressMode = display["progressMode"]
 			if progressMode == "remaining":
 				stateStrings.append(f"{formatSeconds((item.duration - viewOffset) / 1000, ':')} left")
 			else:
 				stateStrings.append(f"{formatSeconds(viewOffset / 1000, ':')} elapsed")
-			if not config["display"]["statusIcon"]:
+			if not display["statusIcon"]:
 				stateStrings.append(state.capitalize())
 
 		stateText = " · ".join(s for s in stateStrings if s)
 
-		postersEnabled = config["display"]["posters"]["enabled"]
+		postersEnabled = display["posters"]["enabled"]
 		thumbUrl = self.uploadToImgur(thumb) if thumb and postersEnabled else ""
 		smallThumbUrl = self.uploadToImgur(smallThumb) if smallThumb and postersEnabled else ""
 
@@ -469,7 +491,7 @@ class PlexAlertListener(threading.Thread):
 			"details": truncate(title, 120),
 		}
 
-		if config["display"]["statusIcon"]:
+		if display["statusIcon"]:
 			smallText = smallText or state.capitalize()
 			smallThumbUrl = smallThumbUrl or state
 
@@ -487,8 +509,8 @@ class PlexAlertListener(threading.Thread):
 		if stateText:
 			activity["state"] = truncate(stateText, 120)
 
-		if config["display"]["buttons"]:
-			buttons = self._buildButtons(item, mediaType, shortTitle)
+		if display["buttons"]:
+			buttons = self._buildButtons(item, mediaType, shortTitle, grandparentItem)
 			if buttons:
 				activity["buttons"] = buttons
 

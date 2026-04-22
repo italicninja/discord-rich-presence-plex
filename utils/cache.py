@@ -32,7 +32,7 @@ def loadCache() -> None:
 	try:
 		with open(cacheFilePath, "r", encoding = "UTF-8") as cacheFile:
 			cache.update(json.load(cacheFile))
-	except:
+	except Exception:
 		root, ext = os.path.splitext(cacheFilePath)
 		os.rename(cacheFilePath, f"{root}-{time.time():.0f}.{ext}")
 		logger.exception("Failed to parse the cache file. A new one will be created.")
@@ -51,9 +51,9 @@ def setCacheKey(key: str, value: Any) -> None:
 		"value": value,
 		"expires": time.time() + CACHE_TTL_SECONDS,
 	}
-	_prune_expired()
+	# Pruning happens at load time (loadCache). No need to prune on every write.
 	try:
 		with open(cacheFilePath, "w", encoding = "UTF-8") as cacheFile:
 			json.dump(cache, cacheFile, separators = (",", ":"))
-	except:
+	except Exception:
 		logger.exception("Failed to write to the cache file")

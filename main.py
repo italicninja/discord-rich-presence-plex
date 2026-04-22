@@ -8,21 +8,8 @@ from config.constants import noPipInstall
 import sys
 
 if not noPipInstall:
-	try:
-		import subprocess
-		def parsePipPackages(packagesStr: str) -> dict[str, str]:
-			return { packageSplit[0].lower(): packageSplit[1] if len(packageSplit) > 1 else "" for packageSplit in [package.split("==") for package in packagesStr.splitlines()] }
-		pipFreezeResult = subprocess.run([sys.executable, "-m", "pip", "freeze"], stdout = subprocess.PIPE, text = True, check = True)
-		installedPackages = parsePipPackages(pipFreezeResult.stdout)
-		with open("requirements.txt", "r", encoding = "UTF-8") as requirementsFile:
-			requiredPackages = parsePipPackages(requirementsFile.read())
-		for packageName, requiredPackageVersion in requiredPackages.items():
-			installedPackageVersion = installedPackages.get(packageName, "none")
-			if installedPackageVersion != requiredPackageVersion:
-				logger.info(f"Installing dependency: {packageName} (required: {requiredPackageVersion}, installed: {installedPackageVersion})")
-				subprocess.run([sys.executable, "-m", "pip", "install", "-U", f"{packageName}=={requiredPackageVersion}"], check = True)
-	except Exception:
-		logger.exception("An unexpected error occurred during automatic installation of dependencies. Install them manually by running the following command: python -m pip install -U -r requirements.txt")
+	from utils.dependencies import ensure_dependencies
+	ensure_dependencies()
 
 from config.constants import dataDirectoryPath, logFilePath, name, version, isInteractive, plexServerNameInput
 from core.config import config, loadConfig, saveConfig

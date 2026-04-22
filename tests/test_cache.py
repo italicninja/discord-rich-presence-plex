@@ -83,11 +83,14 @@ class TestGetSetCacheKey:
 		assert "key" in data
 		assert data["key"]["value"] == "value"
 
-	def test_set_prunes_expired_entries(self):
-		# Plant an expired entry, then set a new one — expired should be gone
+	def test_set_does_not_prune_expired_entries(self):
+		# setCacheKey no longer prunes on every write; pruning only happens at
+		# load time (loadCache). Expired entries remain in memory until then.
 		cache_module.cache["stale"] = {"value": "old", "expires": time.time() - 1}
 		setCacheKey("fresh", "new_value")
-		assert "stale" not in cache_module.cache
+		assert "fresh" in cache_module.cache
+		# stale entry is intentionally NOT removed by setCacheKey
+		assert "stale" in cache_module.cache
 
 	def test_ttl_is_roughly_30_days(self):
 		setCacheKey("key", "value")
